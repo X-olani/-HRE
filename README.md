@@ -35,42 +35,49 @@ editing its config in Admin — no rebuild.
 
 ---
 
-## Quick start (Docker — recommended)
+## Deploy to Vercel with Neon
 
-Requires Docker with Compose.
+1. Create a Neon Postgres project and copy its **pooled** connection string from
+   **Connect**.
+2. In Neon, use a fresh database. Locally, copy `.env.example` to `.env`, set
+   `DATABASE_URL`, and replace `AUTH_SECRET` with a newly generated random secret.
+   Keep both values private.
+3. Run `npm run setup` once from this project folder. It creates the Postgres schema,
+   copies the existing local login account (including its password hash, never the
+   plaintext password), and seeds the two default event templates. It refuses to
+   overwrite a different Neon user. No local events, entries, audit logs, or
+   attachments or capture-extension token are copied; generate a new extension token
+   in Settings after deployment if you use the extension.
+4. Import this GitHub repository into Vercel. Set `DATABASE_URL`, `AUTH_SECRET`, and
+   `APP_URL` in the Vercel project's environment variables. `APP_URL` should be the
+   deployed HTTPS origin, for example `https://your-app.vercel.app`.
+5. Deploy. Sign in using your existing email and password.
 
-```bash
-cp .env.example .env
-#   edit .env:  set AUTH_SECRET (openssl rand -base64 48), APP_URL,
-#   and the SEED_ADMIN_* values for the first admin login.
+The Vercel build command is `npm run build`; the start command is managed by Vercel.
+Use the same Neon database and `AUTH_SECRET` for each Vercel environment that should
+share accounts and sessions. Rotate any secret that has been exposed before deploying.
 
-docker compose up -d --build
-```
+### Local development
 
-Open `http://localhost:3000` and sign in with the `SEED_ADMIN_EMAIL` /
-`SEED_ADMIN_PASSWORD` from `.env`. **Change that password immediately** under Settings.
+Local development uses the same Neon `DATABASE_URL` configured in `.env`.
+`npm run dev` starts the app after the one-time setup above. The previous SQLite file
+is only read by `npm run setup` to copy your login; it is not used by the running app.
+For a production build outside Vercel, run `npm run build && npm run start`.
 
-The database is a single SQLite file in `./data/hre.db` (mounted as a volume). The
-schema is created and the events + admin are seeded automatically on first start.
+### Docker
 
-### Running behind a domain / HTTPS
+The Docker image can run against Neon by setting the same environment variables.
+Prepare the Neon schema and seed data with `npm run setup` before starting the image;
+the container does not run migrations or overwrite database records on startup.
 
-Put it behind a reverse proxy (Caddy, Nginx, Traefik) terminating TLS and set
-`APP_URL=https://your-domain`. Sessions use secure cookies in production.
+### Server-side link capture on Vercel
+
+The app's server-side link capture uses Playwright and a local Chromium browser, which
+is installed by the Docker image but not provisioned automatically in Vercel functions.
+On Vercel, use manual screenshots or the browser extension capture flow; server-side
+link screenshots/metrics require a separately hosted browser service.
 
 ---
-
-## Local development
-
-```bash
-cp .env.example .env            # set AUTH_SECRET at minimum
-npm install
-npx playwright install chromium   # browser used for link capture
-npm run setup                   # create schema + seed admin and events
-npm run dev                     # http://localhost:3000
-```
-
-Production build without Docker: `npm run build && npm run start`.
 
 ---
 
@@ -113,9 +120,8 @@ Exports → download for the active event:
 
 ## Backup & data
 
-Everything lives in `./data/hre.db` (SQLite, including screenshots). Back it up by
-copying that file (or the whole `data/` folder). To move to Postgres later, the data
-layer is isolated in `src/lib/repo.ts` and `src/lib/db.ts`.
+Users, events, entries, screenshots, and audit logs are stored in Neon Postgres.
+Back up the Neon database using its provider tools.
 
 ---
 
@@ -133,5 +139,4 @@ layer is isolated in `src/lib/repo.ts` and `src/lib/db.ts`.
 
 ## Stack
 
-Next.js (App Router, TypeScript) · better-sqlite3 (zero-engine SQLite) · Tailwind ·
-Roboto · ExcelJS. No external database server and no native-engine downloads required.
+Next.js (App Router, TypeScript) · Neon Postgres · Tailwind · Roboto · ExcelJS.

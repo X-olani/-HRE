@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 
 export default async function EditEntry({ params }: { params: { id: string } }) {
   const session = await requireSession();
-  const entry = getEntry(params.id);
+  const entry = await getEntry(params.id);
   if (!entry) notFound();
   const canEdit = entry.createdById === session.userId || roleAtLeast(session.role, "SENIOR");
   if (!canEdit) redirect(`/entries/${entry.id}`);
-  const ev = getEvent(entry.eventId);
+  const ev = await getEvent(entry.eventId);
   if (!ev) notFound();
   return (
     <div className="space-y-4">

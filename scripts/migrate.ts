@@ -1,6 +1,10 @@
 import { loadEnv } from "./_env";
 loadEnv();
-import { getDb } from "../src/lib/db";
+import { migrate } from "../src/lib/db";
 
-getDb(); // opens the DB and runs CREATE TABLE IF NOT EXISTS ...
-console.log(`✓ Database ready at ${process.env.DATABASE_PATH || "./data/hre.db"}`);
+migrate()
+  .then(() => console.log("✓ Neon database schema is ready."))
+  .catch((error) => {
+    console.error("Database migration failed:", error);
+    process.exitCode = 1;
+  });

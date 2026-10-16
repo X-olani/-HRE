@@ -25,5 +25,4 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app/data
 EXPOSE 3000
-# On start: ensure schema + seed (idempotent), then run the server.
-CMD ["sh", "-c", "npm run setup && npm run start"]
+CMD ["npm", "run", "start"]

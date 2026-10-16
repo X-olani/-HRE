@@ -32,10 +32,10 @@ export async function POST(req: Request) {
   const token = (req.headers.get("x-hre-token") || String(form.get("token") || "")).trim();
   if (!token) return Response.json({ error: "Missing token" }, { status: 401, headers: CORS });
 
-  const user = getUserByApiTokenHash(hashApiToken(token));
+  const user = await getUserByApiTokenHash(hashApiToken(token));
   if (!user) return Response.json({ error: "Invalid token" }, { status: 401, headers: CORS });
 
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   if (!ev) return Response.json({ error: "No active event" }, { status: 409, headers: CORS });
 
   const url = String(form.get("url") || "").trim();
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const pageText = String(form.get("text") || "").trim();
   const narrative = pageText ? `Captured context: ${pageText.slice(0, 1000)}` : null;
 
-  const entry = createEntry({
+  const entry = await createEntry({
     eventId: ev.id,
     createdById: user.id,
     platform,
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
   const shot = form.get("screenshot");
   if (shot instanceof File && shot.size > 0 && shot.size < 10 * 1024 * 1024) {
     const buf = Buffer.from(await shot.arrayBuffer());
-    addAttachment({
+    await addAttachment({
       entryId: entry.id,
       filename: shot.name || "capture.png",
       mimeType: shot.type || "image/png",
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     });
   }
 
-  addAudit({
+  await addAudit({
     entryId: entry.id,
     userId: user.id,
     action: "CAPTURE",

@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // submits the screenshot along with the entry.
 export async function POST(req: Request) {
   const s = await getSession();
-  const u = s ? getUserById(s.userId) : null;
+  const u = s ? await getUserById(s.userId) : null;
   if (!u || !u.active) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
   let url = "";

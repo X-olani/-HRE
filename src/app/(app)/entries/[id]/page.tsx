@@ -19,11 +19,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default async function EntryDetail({ params }: { params: { id: string } }) {
   const session = await requireSession();
-  const entry = getEntry(params.id);
+  const entry = await getEntry(params.id);
   if (!entry) notFound();
-  const ev = getEvent(entry.eventId)!;
-  const atts = listAttachments(entry.id);
-  const audit = listAudit(entry.id);
+  const ev = (await getEvent(entry.eventId))!;
+  const atts = await listAttachments(entry.id);
+  const audit = await listAudit(entry.id);
   const canEdit = entry.createdById === session.userId || roleAtLeast(session.role, "SENIOR");
   const isSenior = roleAtLeast(session.role, "SENIOR");
 

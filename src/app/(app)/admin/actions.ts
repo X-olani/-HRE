@@ -42,8 +42,8 @@ export async function createUserAction(_prev: AdminState, fd: FormData): Promise
   if (!email || !name || !password) return { error: "Name, email and password are required." };
   if (!ROLES.includes(role)) return { error: "Invalid role." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
-  if (getUserByEmail(email)) return { error: "A user with that email already exists." };
-  createUser({ email, name, role, passwordHash: await hashPassword(password) });
+  if (await getUserByEmail(email)) return { error: "A user with that email already exists." };
+  await createUser({ email, name, role, passwordHash: await hashPassword(password) });
   revalidatePath("/admin");
   return { ok: `User ${email} created.` };
 }
@@ -51,7 +51,7 @@ export async function createUserAction(_prev: AdminState, fd: FormData): Promise
 export async function updateUserAction(_prev: AdminState, fd: FormData): Promise<AdminState> {
   await requireRole("ADMIN");
   const id = str(fd.get("id"));
-  const u = getUserById(id);
+  const u = await getUserById(id);
   if (!u) return { error: "User not found." };
   const role = str(fd.get("role")) as Role;
   const active = str(fd.get("active")) === "1";
@@ -61,7 +61,7 @@ export async function updateUserAction(_prev: AdminState, fd: FormData): Promise
     if (newPw.length < 8) return { error: "Password must be at least 8 characters." };
     patch.passwordHash = await hashPassword(newPw);
   }
-  updateUser(id, patch);
+  await updateUser(id, patch);
   revalidatePath("/admin");
   return { ok: "User updated." };
 }
@@ -73,7 +73,7 @@ export async function createEventAction(_prev: AdminState, fd: FormData): Promis
   const slug = str(fd.get("slug")).toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   const cloneFrom = str(fd.get("cloneFrom"));
   if (!name || !slug) return { error: "Name and slug are required." };
-  if (listEvents().some((e) => e.slug === slug)) return { error: "That slug is already in use." };
+  if ((await listEvents()).some((e) => e.slug === slug)) return { error: "That slug is already in use." };
 
   let cfg = {
     categories: ELECTION_CATEGORIES,
@@ -84,7 +84,7 @@ export async function createEventAction(_prev: AdminState, fd: FormData): Promis
     tsetCategoryMap: ELECTION_TSET_MAP
   };
   if (cloneFrom) {
-    const src = getEvent(cloneFrom);
+    const src = await getEvent(cloneFrom);
     if (src)
       cfg = {
         categories: src.categories,
@@ -96,7 +96,7 @@ export async function createEventAction(_prev: AdminState, fd: FormData): Promis
       };
   }
 
-  const ev = createEvent({
+  const ev = await createEvent({
     name,
     slug,
     description: str(fd.get("description")) || null,
@@ -112,12 +112,12 @@ export async function createEventAction(_prev: AdminState, fd: FormData): Promis
 export async function setActiveEventAction(_prev: AdminState, fd: FormData): Promise<AdminState> {
   await requireRole("ADMIN");
   const id = str(fd.get("id"));
-  const target = getEvent(id);
+  const target = await getEvent(id);
   if (!target) return { error: "Event not found." };
-  for (const e of listEvents()) {
-    if (e.active && e.id !== id) updateEvent(e.id, { active: false });
+  for (const e of await listEvents()) {
+    if (e.active && e.id !== id) await updateEvent(e.id, { active: false });
   }
-  updateEvent(id, { active: true });
+  await updateEvent(id, { active: true });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
   return { ok: `${target.name} is now the active event.` };
@@ -134,7 +134,7 @@ function parseJson<T>(raw: string, label: string): { value?: T; error?: string }
 export async function updateEventAction(_prev: AdminState, fd: FormData): Promise<AdminState> {
   await requireRole("ADMIN");
   const id = str(fd.get("id"));
-  const ev = getEvent(id);
+  const ev = await getEvent(id);
   if (!ev) return { error: "Event not found." };
 
   const cats = parseJson(str(fd.get("categories")), "Categories");
@@ -146,7 +146,7 @@ export async function updateEventAction(_prev: AdminState, fd: FormData): Promis
   const tset = parseJson(str(fd.get("tsetCategoryMap")), "TSET map");
   if (tset.error) return { error: tset.error };
 
-  updateEvent(id, {
+  await updateEvent(id, {
     name: str(fd.get("name")) || ev.name,
     description: str(fd.get("description")) || null,
     startDate: str(fd.get("startDate")) || null,

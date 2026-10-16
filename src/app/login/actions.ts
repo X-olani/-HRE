@@ -15,7 +15,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 
   if (!email || !password) return { error: "Enter your email and password." };
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) {
     return { error: "Invalid email or password." };
   }

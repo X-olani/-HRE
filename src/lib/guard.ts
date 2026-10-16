@@ -8,7 +8,7 @@ import { roleAtLeast, type Role } from "./types";
 export async function requireSession(): Promise<Session> {
   const s = await getSession();
   if (!s) redirect("/login");
-  const u = getUserById(s.userId);
+  const u = await getUserById(s.userId);
   if (!u || !u.active) redirect("/login");
   // keep role fresh from DB
   return { ...s, role: u.role, name: u.name, email: u.email };

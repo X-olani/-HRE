@@ -1,11 +1,11 @@
-import { getDb } from "@/lib/db";
+import { query } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    getDb().prepare("SELECT 1").get();
+    await query("SELECT 1");
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ ok: false }, { status: 500 });

@@ -20,10 +20,10 @@ export async function GET(req: Request, { params }: { params: { type: string } }
   const format = url.searchParams.get("format") === "csv" ? "csv" : "xlsx";
   const includeAll = url.searchParams.get("all") === "1";
 
-  const ev = eventId ? getEvent(eventId) : getActiveEvent();
+  const ev = eventId ? await getEvent(eventId) : await getActiveEvent();
   if (!ev) return new Response("No event", { status: 400 });
 
-  const all = listEntries({ eventId: ev.id, limit: 2000 });
+  const all = await listEntries({ eventId: ev.id, limit: 2000 });
   const stamp = new Date().toISOString().slice(0, 10);
 
   let headers: string[];

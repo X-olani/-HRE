@@ -4,7 +4,7 @@ import { getActiveEvent } from "@/lib/repo";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   return (
     <div className="min-h-screen">
       <Nav name={session.name} role={session.role} eventName={ev?.name || "No active event"} />

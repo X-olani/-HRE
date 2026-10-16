@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   await requireRole("ADMIN");
-  const users = listUsers();
-  const events = listEvents();
+  const users = await listUsers();
+  const events = await listEvents();
 
   return (
     <div className="space-y-6">

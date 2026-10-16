@@ -1,4 +1,4 @@
-import { getDb, newId, nowIso } from "./db";
+import { newId, nowIso, query } from "./db";
 import type {
   AuditEntry,
   Attachment,
@@ -10,9 +10,10 @@ import type {
   User
 } from "./types";
 
-const b = (v: any) => (v ? 1 : 0);
+const b = (v: any) => !!v;
 const toBool = (v: any) => !!v;
 const J = (v: any) => JSON.stringify(v ?? []);
+const numberOrNull = (v: any): number | null => (v === null || v === undefined ? null : Number(v));
 const parse = <T>(v: any, fb: T): T => {
   try {
     return v ? (JSON.parse(v) as T) : fb;
@@ -73,10 +74,10 @@ function toEntry(r: any): Entry {
     machineTranslation: toBool(r.machine_translation),
     liveStream: toBool(r.live_stream),
     originalPostDate: r.original_post_date ?? null,
-    metricsViews: r.metrics_views ?? null,
-    metricsLikes: r.metrics_likes ?? null,
-    metricsShares: r.metrics_shares ?? null,
-    metricsComments: r.metrics_comments ?? null,
+    metricsViews: numberOrNull(r.metrics_views),
+    metricsLikes: numberOrNull(r.metrics_likes),
+    metricsShares: numberOrNull(r.metrics_shares),
+    metricsComments: numberOrNull(r.metrics_comments),
     metricsRaw: r.metrics_raw ?? null,
     status: r.status as Status,
     qualifies: r.qualifies === null || r.qualifies === undefined ? null : toBool(r.qualifies),
@@ -108,96 +109,89 @@ function toEntryView(r: any): EntryView {
     createdByName: r.created_by_name ?? "",
     reviewedByName: r.reviewed_by_name ?? null,
     eventName: r.event_name ?? "",
-    attachmentCount: r.attachment_count ?? 0
+    attachmentCount: Number(r.attachment_count ?? 0)
   };
 }
 
 // ---- users ------------------------------------------------------------------
 
-export function getUserByEmail(email: string): User | null {
-  const r = getDb().prepare("SELECT * FROM users WHERE email = ?").get(email.toLowerCase());
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const [r] = await query("SELECT * FROM users WHERE email = ?", email.toLowerCase());
   return r ? toUser(r) : null;
 }
-export function getUserById(id: string): User | null {
-  const r = getDb().prepare("SELECT * FROM users WHERE id = ?").get(id);
+export async function getUserById(id: string): Promise<User | null> {
+  const [r] = await query("SELECT * FROM users WHERE id = ?", id);
   return r ? toUser(r) : null;
 }
-export function getUserByApiTokenHash(hash: string): User | null {
-  const r = getDb().prepare("SELECT * FROM users WHERE api_token_hash = ? AND active = 1").get(hash);
+export async function getUserByApiTokenHash(hash: string): Promise<User | null> {
+  const [r] = await query("SELECT * FROM users WHERE api_token_hash = ? AND active = TRUE", hash);
   return r ? toUser(r) : null;
 }
-export function listUsers(): User[] {
-  return getDb().prepare("SELECT * FROM users ORDER BY name").all().map(toUser);
+export async function listUsers(): Promise<User[]> {
+  return (await query("SELECT * FROM users ORDER BY name")).map(toUser);
 }
-export function createUser(input: {
+export async function createUser(input: {
   email: string;
   name: string;
   passwordHash: string;
   role: Role;
-}): User {
+}): Promise<User> {
   const id = newId();
   const ts = nowIso();
-  getDb()
-    .prepare(
-      `INSERT INTO users (id,email,name,password_hash,role,active,created_at,updated_at)
-       VALUES (?,?,?,?,?,1,?,?)`
-    )
-    .run(id, input.email.toLowerCase(), input.name, input.passwordHash, input.role, ts, ts);
-  return getUserById(id)!;
+  await query(
+    `INSERT INTO users (id,email,name,password_hash,role,active,created_at,updated_at)
+     VALUES (?,?,?,?,?,TRUE,?,?)`,
+    id, input.email.toLowerCase(), input.name, input.passwordHash, input.role, ts, ts
+  );
+  return (await getUserById(id))!;
 }
-export function updateUser(
+export async function updateUser(
   id: string,
   patch: Partial<{ name: string; role: Role; active: boolean; passwordHash: string }>
-) {
-  const cur = getUserById(id);
+) : Promise<void> {
+  const cur = await getUserById(id);
   if (!cur) return;
-  getDb()
-    .prepare(
-      `UPDATE users SET name=?, role=?, active=?, password_hash=?, updated_at=? WHERE id=?`
-    )
-    .run(
+  await query(
+      `UPDATE users SET name=?, role=?, active=?, password_hash=?, updated_at=? WHERE id=?`,
       patch.name ?? cur.name,
       patch.role ?? cur.role,
-      patch.active === undefined ? b(cur.active) : b(patch.active),
+      patch.active === undefined ? cur.active : patch.active,
       patch.passwordHash ?? cur.passwordHash,
       nowIso(),
       id
     );
 }
-export function setApiTokenHash(id: string, hash: string | null) {
-  getDb().prepare("UPDATE users SET api_token_hash=?, updated_at=? WHERE id=?").run(hash, nowIso(), id);
+export async function setApiTokenHash(id: string, hash: string | null): Promise<void> {
+  await query("UPDATE users SET api_token_hash=?, updated_at=? WHERE id=?", hash, nowIso(), id);
 }
 
 // ---- events -----------------------------------------------------------------
 
-export function listEvents(): EventConfig[] {
-  return getDb().prepare("SELECT * FROM events ORDER BY active DESC, created_at DESC").all().map(toEvent);
+export async function listEvents(): Promise<EventConfig[]> {
+  return (await query("SELECT * FROM events ORDER BY active DESC, created_at DESC")).map(toEvent);
 }
-export function getEvent(id: string): EventConfig | null {
-  const r = getDb().prepare("SELECT * FROM events WHERE id = ?").get(id);
+export async function getEvent(id: string): Promise<EventConfig | null> {
+  const [r] = await query("SELECT * FROM events WHERE id = ?", id);
   return r ? toEvent(r) : null;
 }
-export function getActiveEvent(): EventConfig | null {
-  const r = getDb().prepare("SELECT * FROM events WHERE active = 1 ORDER BY created_at DESC").get();
+export async function getActiveEvent(): Promise<EventConfig | null> {
+  const [r] = await query("SELECT * FROM events WHERE active = TRUE ORDER BY created_at DESC LIMIT 1");
   return r ? toEvent(r) : null;
 }
-export function createEvent(
+export async function createEvent(
   e: Omit<EventConfig, "id" | "createdAt" | "updatedAt">
-): EventConfig {
+): Promise<EventConfig> {
   const id = newId();
   const ts = nowIso();
-  getDb()
-    .prepare(
+  await query(
       `INSERT INTO events
        (id,name,slug,description,active,start_date,end_date,categories,platforms,content_types,coded_language,reporting_routes,tset_category_map,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id,
       e.name,
       e.slug,
       e.description ?? null,
-      b(e.active),
+      e.active,
       e.startDate ?? null,
       e.endDate ?? null,
       J(e.categories),
@@ -209,23 +203,20 @@ export function createEvent(
       ts,
       ts
     );
-  return getEvent(id)!;
+  return (await getEvent(id))!;
 }
-export function updateEvent(id: string, e: Partial<EventConfig>) {
-  const cur = getEvent(id);
+export async function updateEvent(id: string, e: Partial<EventConfig>): Promise<void> {
+  const cur = await getEvent(id);
   if (!cur) return;
   const m = { ...cur, ...e };
-  getDb()
-    .prepare(
+  await query(
       `UPDATE events SET name=?,slug=?,description=?,active=?,start_date=?,end_date=?,
         categories=?,platforms=?,content_types=?,coded_language=?,reporting_routes=?,tset_category_map=?,updated_at=?
-       WHERE id=?`
-    )
-    .run(
+       WHERE id=?`,
       m.name,
       m.slug,
       m.description ?? null,
-      b(m.active),
+      m.active,
       m.startDate ?? null,
       m.endDate ?? null,
       J(m.categories),
@@ -250,8 +241,8 @@ const ENTRY_VIEW_SELECT = `
   JOIN events ev ON ev.id = e.event_id
 `;
 
-export function getEntry(id: string): EntryView | null {
-  const r = getDb().prepare(`${ENTRY_VIEW_SELECT} WHERE e.id = ?`).get(id);
+export async function getEntry(id: string): Promise<EntryView | null> {
+  const [r] = await query(`${ENTRY_VIEW_SELECT} WHERE e.id = ?`, id);
   return r ? toEntryView(r) : null;
 }
 
@@ -268,7 +259,7 @@ export interface EntryFilter {
   limit?: number;
 }
 
-export function listEntries(f: EntryFilter = {}): EntryView[] {
+export async function listEntries(f: EntryFilter = {}): Promise<EntryView[]> {
   const where: string[] = [];
   const args: any[] = [];
   if (f.eventId) {
@@ -293,7 +284,7 @@ export function listEntries(f: EntryFilter = {}): EntryView[] {
   }
   if (f.qualifies !== undefined) {
     where.push("e.qualifies = ?");
-    args.push(b(f.qualifies));
+    args.push(f.qualifies);
   }
   if (f.category) {
     where.push("e.categories LIKE ?");
@@ -310,17 +301,13 @@ export function listEntries(f: EntryFilter = {}): EntryView[] {
       ? "ORDER BY (COALESCE(e.metrics_views,0)+COALESCE(e.metrics_likes,0)+COALESCE(e.metrics_shares,0)) DESC"
       : "ORDER BY e.created_at DESC";
   const limit = f.limit ? `LIMIT ${Math.max(1, Math.min(2000, f.limit))}` : "";
-  return getDb()
-    .prepare(`${ENTRY_VIEW_SELECT} ${whereSql} ${order} ${limit}`)
-    .all(...args)
-    .map(toEntryView);
+  return (await query(`${ENTRY_VIEW_SELECT} ${whereSql} ${order} ${limit}`, ...args)).map(toEntryView);
 }
 
-export function createEntry(input: Partial<Entry> & { eventId: string; createdById: string }): Entry {
+export async function createEntry(input: Partial<Entry> & { eventId: string; createdById: string }): Promise<Entry> {
   const id = newId();
   const ts = nowIso();
-  getDb()
-    .prepare(
+  await query(
       `INSERT INTO entries
       (id,event_id,created_by_id,platform,content_url,content_type,categories,tier,reason,narrative,
        language,machine_translation,live_stream,original_post_date,metrics_views,metrics_likes,metrics_shares,
@@ -328,9 +315,7 @@ export function createEntry(input: Partial<Entry> & { eventId: string; createdBy
        escalated_tier2,saps_considered,saps_notes,real411_submitted,real411_reference,real411_ruling,
        real411_outcome,real411_link,live_start,live_end,reviewed_by_id,review_decision,review_notes,reviewed_at,
        created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id,
       input.eventId,
       input.createdById,
@@ -351,7 +336,7 @@ export function createEntry(input: Partial<Entry> & { eventId: string; createdBy
       input.metricsComments ?? null,
       input.metricsRaw ?? null,
       input.status ?? "DRAFT",
-      input.qualifies === null || input.qualifies === undefined ? null : b(input.qualifies),
+      input.qualifies === null || input.qualifies === undefined ? null :       input.qualifies,
       b(input.reportedInPlatform),
       J(input.reportChannels ?? []),
       input.reportFeedback ?? null,
@@ -372,7 +357,8 @@ export function createEntry(input: Partial<Entry> & { eventId: string; createdBy
       ts,
       ts
     );
-  return toEntry(getDb().prepare("SELECT * FROM entries WHERE id=?").get(id));
+  const [entry] = await query("SELECT * FROM entries WHERE id=?", id);
+  return toEntry(entry);
 }
 
 // Whitelisted dynamic update: camelCase field -> [column, serializer]
@@ -414,7 +400,7 @@ const ENTRY_FIELDS: Record<string, [string, (v: any) => any]> = {
   reviewedAt: ["reviewed_at", (v) => v ?? null]
 };
 
-export function updateEntry(id: string, patch: Record<string, any>) {
+export async function updateEntry(id: string, patch: Record<string, any>): Promise<void> {
   const sets: string[] = [];
   const args: any[] = [];
   for (const [k, v] of Object.entries(patch)) {
@@ -427,25 +413,22 @@ export function updateEntry(id: string, patch: Record<string, any>) {
   sets.push("updated_at = ?");
   args.push(nowIso());
   args.push(id);
-  getDb().prepare(`UPDATE entries SET ${sets.join(", ")} WHERE id = ?`).run(...args);
+  await query(`UPDATE entries SET ${sets.join(", ")} WHERE id = ?`, ...args);
 }
 
 // ---- attachments ------------------------------------------------------------
 
-export function addAttachment(input: {
+export async function addAttachment(input: {
   entryId: string;
   filename: string;
   mimeType: string;
   kind?: string;
   data: Buffer;
-}): string {
+}): Promise<string> {
   const id = newId();
-  getDb()
-    .prepare(
+  await query(
       `INSERT INTO attachments (id,entry_id,filename,mime_type,size,kind,data,created_at)
-       VALUES (?,?,?,?,?,?,?,?)`
-    )
-    .run(
+       VALUES (?,?,?,?,?,?,?,?)`,
       id,
       input.entryId,
       input.filename,
@@ -457,13 +440,10 @@ export function addAttachment(input: {
     );
   return id;
 }
-export function listAttachments(entryId: string): Attachment[] {
-  return getDb()
-    .prepare(
+export async function listAttachments(entryId: string): Promise<Attachment[]> {
+  return (await query(
       "SELECT id,entry_id,filename,mime_type,size,kind,created_at FROM attachments WHERE entry_id=? ORDER BY created_at"
-    )
-    .all(entryId)
-    .map((r: any) => ({
+    , entryId)).map((r: any) => ({
       id: r.id,
       entryId: r.entry_id,
       filename: r.filename,
@@ -473,28 +453,28 @@ export function listAttachments(entryId: string): Attachment[] {
       createdAt: r.created_at
     }));
 }
-export function getAttachmentData(id: string): { mimeType: string; data: Buffer } | null {
-  const r: any = getDb().prepare("SELECT mime_type, data FROM attachments WHERE id=?").get(id);
+export async function getAttachmentData(id: string): Promise<{ mimeType: string; data: Buffer } | null> {
+  const [r] = await query<{ mime_type: string; data: Buffer | Uint8Array | string }>("SELECT mime_type, data FROM attachments WHERE id=?", id);
   if (!r) return null;
-  return { mimeType: r.mime_type, data: r.data as Buffer };
+  const data = typeof r.data === "string" && r.data.startsWith("\\x")
+    ? Buffer.from(r.data.slice(2), "hex")
+    : Buffer.from(r.data);
+  return { mimeType: r.mime_type, data };
 }
 
 // ---- audit ------------------------------------------------------------------
 
-export function addAudit(input: {
+export async function addAudit(input: {
   entryId?: string | null;
   userId?: string | null;
   action: string;
   detail?: string | null;
   fromStatus?: string | null;
   toStatus?: string | null;
-}) {
-  getDb()
-    .prepare(
+}): Promise<void> {
+  await query(
       `INSERT INTO audit_logs (id,entry_id,user_id,action,detail,from_status,to_status,created_at)
-       VALUES (?,?,?,?,?,?,?,?)`
-    )
-    .run(
+       VALUES (?,?,?,?,?,?,?,?)`,
       newId(),
       input.entryId ?? null,
       input.userId ?? null,
@@ -505,15 +485,13 @@ export function addAudit(input: {
       nowIso()
     );
 }
-export function listAudit(entryId: string): AuditEntry[] {
-  return getDb()
-    .prepare(
+export async function listAudit(entryId: string): Promise<AuditEntry[]> {
+  return (await query(
       `SELECT al.*, u.name AS user_name FROM audit_logs al
        LEFT JOIN users u ON u.id = al.user_id
-       WHERE al.entry_id = ? ORDER BY al.created_at`
-    )
-    .all(entryId)
-    .map((r: any) => ({
+       WHERE al.entry_id = ? ORDER BY al.created_at`,
+      entryId
+    )).map((r: any) => ({
       id: r.id,
       entryId: r.entry_id,
       userId: r.user_id,
@@ -528,35 +506,30 @@ export function listAudit(entryId: string): AuditEntry[] {
 
 // ---- dashboard aggregates ---------------------------------------------------
 
-export function dashboardStats(eventId: string) {
-  const db = getDb();
-  const total = (db.prepare("SELECT COUNT(*) c FROM entries WHERE event_id=?").get(eventId) as any).c;
-  const byStatus = db
-    .prepare("SELECT status, COUNT(*) c FROM entries WHERE event_id=? GROUP BY status")
-    .all(eventId) as any[];
-  const byPlatform = db
-    .prepare("SELECT platform, COUNT(*) c FROM entries WHERE event_id=? GROUP BY platform ORDER BY c DESC")
-    .all(eventId) as any[];
-  const byTier = db
-    .prepare("SELECT tier, COUNT(*) c FROM entries WHERE event_id=? GROUP BY tier")
-    .all(eventId) as any[];
-  const byReviewer = db
-    .prepare(
-      `SELECT u.name AS name, COUNT(*) c FROM entries e JOIN users u ON u.id=e.created_by_id
-       WHERE e.event_id=? GROUP BY e.created_by_id ORDER BY c DESC LIMIT 12`
-    )
-    .all(eventId) as any[];
-  return { total, byStatus, byPlatform, byTier, byReviewer };
+export async function dashboardStats(eventId: string) {
+  const [totalRow] = await query<{ c: string | number }>("SELECT COUNT(*) c FROM entries WHERE event_id=?", eventId);
+  const byStatus = await query<{ status: string; c: string | number }>("SELECT status, COUNT(*) c FROM entries WHERE event_id=? GROUP BY status", eventId);
+  const byPlatform = await query<{ platform: string; c: string | number }>("SELECT platform, COUNT(*) c FROM entries WHERE event_id=? GROUP BY platform ORDER BY c DESC", eventId);
+  const byTier = await query<{ tier: number; c: string | number }>("SELECT tier, COUNT(*) c FROM entries WHERE event_id=? GROUP BY tier", eventId);
+  const byReviewer = await query<{ name: string; c: string | number }>(
+    `SELECT u.name AS name, COUNT(*) c FROM entries e JOIN users u ON u.id=e.created_by_id
+     WHERE e.event_id=? GROUP BY e.created_by_id ORDER BY c DESC LIMIT 12`,
+    eventId
+  );
+  return {
+    total: Number(totalRow.c),
+    byStatus: byStatus.map((row) => ({ ...row, c: Number(row.c) })),
+    byPlatform: byPlatform.map((row) => ({ ...row, c: Number(row.c) })),
+    byTier: byTier.map((row) => ({ ...row, c: Number(row.c) })),
+    byReviewer: byReviewer.map((row) => ({ ...row, c: Number(row.c) }))
+  };
 }
 
-export function categoryCounts(eventId: string, keys: string[]) {
-  const db = getDb();
+export async function categoryCounts(eventId: string, keys: string[]) {
   const out: Record<string, number> = {};
   for (const k of keys) {
-    const r = db
-      .prepare("SELECT COUNT(*) c FROM entries WHERE event_id=? AND categories LIKE ?")
-      .get(eventId, `%"${k}"%`) as any;
-    out[k] = r.c;
+    const [row] = await query<{ c: string | number }>("SELECT COUNT(*) c FROM entries WHERE event_id=? AND categories LIKE ?", eventId, `%"${k}"%`);
+    out[k] = Number(row.c);
   }
   return out;
 }

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard({ searchParams }: { searchParams: { forbidden?: string } }) {
   await requireSession();
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
 
   if (!ev) {
     return (
@@ -23,11 +23,11 @@ export default async function Dashboard({ searchParams }: { searchParams: { forb
     );
   }
 
-  const stats = dashboardStats(ev.id);
+  const stats = await dashboardStats(ev.id);
   const catKeys = ev.categories.map((c) => c.key);
-  const cats = categoryCounts(ev.id, catKeys);
+  const cats = await categoryCounts(ev.id, catKeys);
   const statusMap = Object.fromEntries(stats.byStatus.map((s) => [s.status, s.c]));
-  const topReach = listEntries({ eventId: ev.id, sort: "reach", limit: 6 });
+  const topReach = await listEntries({ eventId: ev.id, sort: "reach", limit: 6 });
 
   const pending = (statusMap["SUBMITTED"] || 0) + (statusMap["UNDER_REVIEW"] || 0);
   const escalated = statusMap["ESCALATED"] || 0;

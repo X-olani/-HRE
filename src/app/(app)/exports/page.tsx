@@ -37,10 +37,10 @@ function Card({
 
 export default async function ExportsPage() {
   await requireSession();
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   if (!ev) return <p className="text-sm text-body/70">No active event.</p>;
 
-  const all = listEntries({ eventId: ev.id, limit: 2000 });
+  const all = await listEntries({ eventId: ev.id, limit: 2000 });
   const tsetCount = all.filter((e) => isTsetEligible(e, false)).length;
   const qualifying = all.filter((e) => e.qualifies === true).length;
   const real411 = all.filter((e) => e.real411Submitted || e.qualifies === true).length;

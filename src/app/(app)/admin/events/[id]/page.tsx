@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EventConfigPage({ params }: { params: { id: string } }) {
   await requireRole("ADMIN");
-  const ev = getEvent(params.id);
+  const ev = await getEvent(params.id);
   if (!ev) notFound();
   return (
     <div className="space-y-4">

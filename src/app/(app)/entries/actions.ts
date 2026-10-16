@@ -63,7 +63,7 @@ async function saveAttachments(entryId: string, fd: FormData) {
   for (const f of files) {
     if (f.size > 8 * 1024 * 1024) continue; // 8MB cap per file
     const buf = Buffer.from(await f.arrayBuffer());
-    addAttachment({
+    await addAttachment({
       entryId,
       filename: f.name || "screenshot.png",
       mimeType: f.type || "image/png",
@@ -81,7 +81,7 @@ async function saveAutoCapture(entryId: string, userId: string, fd: FormData) {
   try {
     meta = JSON.parse(str(fd.get("autoCaptureMeta")) || "{}");
   } catch {}
-  addAttachment({
+  await addAttachment({
     entryId,
     filename: f.name || "auto-capture.png",
     mimeType: "image/png",
@@ -91,7 +91,7 @@ async function saveAutoCapture(entryId: string, userId: string, fd: FormData) {
   const parts = [`Screenshot auto-captured from link${meta.capturedAt ? ` at ${meta.capturedAt}` : ""}`];
   if (meta.source) parts.push(`source: ${meta.source}`);
   if (meta.filled?.length) parts.push(`auto-filled: ${meta.filled.join(", ")}`);
-  addAudit({ entryId, userId, action: "CAPTURE", detail: parts.join("; ").slice(0, 500) });
+  await addAudit({ entryId, userId, action: "CAPTURE", detail: parts.join("; ").slice(0, 500) });
 }
 
 export async function saveEntryAction(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -111,16 +111,16 @@ export async function saveEntryAction(_prev: FormState, fd: FormData): Promise<F
   let entryId = id;
 
   if (id) {
-    const existing = getEntry(id);
+    const existing = await getEntry(id);
     if (!existing) return { error: "Entry not found." };
     const canEdit =
       existing.createdById === session.userId || roleAtLeast(session.role, "SENIOR");
     if (!canEdit) return { error: "You can’t edit this entry." };
-    updateEntry(id, {
+    await updateEntry(id, {
       ...data,
       status: intent === "submit" ? "SUBMITTED" : existing.status
     });
-    addAudit({
+    await addAudit({
       entryId: id,
       userId: session.userId,
       action: intent === "submit" ? "SUBMIT" : "EDIT",
@@ -129,16 +129,16 @@ export async function saveEntryAction(_prev: FormState, fd: FormData): Promise<F
       toStatus: intent === "submit" ? "SUBMITTED" : existing.status
     });
   } else {
-    const ev = getActiveEvent();
+    const ev = await getActiveEvent();
     if (!ev) return { error: "No active event to log against." };
-    const created = createEntry({
+    const created = await createEntry({
       eventId: ev.id,
       createdById: session.userId,
       ...data,
       status: intent === "submit" ? "SUBMITTED" : "DRAFT"
     });
     entryId = created.id;
-    addAudit({
+    await addAudit({
       entryId,
       userId: session.userId,
       action: "CREATE",
@@ -159,7 +159,7 @@ export async function changeStatusAction(_prev: FormState, fd: FormData): Promis
   const id = str(fd.get("id"));
   const to = str(fd.get("to")) as Status;
   const note = strOrNull(fd.get("note"));
-  const entry = getEntry(id);
+  const entry = await getEntry(id);
   if (!entry) return { error: "Entry not found." };
 
   const allowed = (TRANSITIONS[entry.status] || []).find((t) => t.to === to);
@@ -180,8 +180,8 @@ export async function changeStatusAction(_prev: FormState, fd: FormData): Promis
   }
   if (to === "ESCALATED") patch.escalatedTier2 = true;
 
-  updateEntry(id, patch);
-  addAudit({
+  await updateEntry(id, patch);
+  await addAudit({
     entryId: id,
     userId: session.userId,
     action: "STATUS",
@@ -199,7 +199,7 @@ export async function reviewMetaAction(_prev: FormState, fd: FormData): Promise<
   const session = await requireSession();
   if (!roleAtLeast(session.role, "SENIOR")) return { error: "Senior reviewers only." };
   const id = str(fd.get("id"));
-  const entry = getEntry(id);
+  const entry = await getEntry(id);
   if (!entry) return { error: "Entry not found." };
   const qualifiesRaw = str(fd.get("qualifies"));
   const patch: Record<string, any> = {
@@ -209,8 +209,8 @@ export async function reviewMetaAction(_prev: FormState, fd: FormData): Promise<
   };
   if (qualifiesRaw === "yes") patch.qualifies = true;
   else if (qualifiesRaw === "no") patch.qualifies = false;
-  updateEntry(id, patch);
-  addAudit({
+  await updateEntry(id, patch);
+  await addAudit({
     entryId: id,
     userId: session.userId,
     action: "REVIEW",
@@ -224,9 +224,9 @@ export async function reviewMetaAction(_prev: FormState, fd: FormData): Promise<
 export async function trackingAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const session = await requireSession();
   const id = str(fd.get("id"));
-  const entry = getEntry(id);
+  const entry = await getEntry(id);
   if (!entry) return { error: "Entry not found." };
-  updateEntry(id, {
+  await updateEntry(id, {
     reportedInPlatform: on(fd.get("reportedInPlatform")),
     reportChannels: fd.getAll("reportChannels").map(String),
     reportFeedback: strOrNull(fd.get("reportFeedback")),
@@ -239,7 +239,7 @@ export async function trackingAction(_prev: FormState, fd: FormData): Promise<Fo
     real411Outcome: strOrNull(fd.get("real411Outcome")),
     real411Link: strOrNull(fd.get("real411Link"))
   });
-  addAudit({ entryId: id, userId: session.userId, action: "TRACKING", detail: "Reporting/Real411 updated" });
+  await addAudit({ entryId: id, userId: session.userId, action: "TRACKING", detail: "Reporting/Real411 updated" });
   revalidatePath(`/entries/${id}`);
   return {};
 }
@@ -247,10 +247,10 @@ export async function trackingAction(_prev: FormState, fd: FormData): Promise<Fo
 export async function uploadScreenshotAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const session = await requireSession();
   const id = str(fd.get("id"));
-  const entry = getEntry(id);
+  const entry = await getEntry(id);
   if (!entry) return { error: "Entry not found." };
   await saveAttachments(id, fd);
-  addAudit({ entryId: id, userId: session.userId, action: "ATTACH", detail: "Screenshot added" });
+  await addAudit({ entryId: id, userId: session.userId, action: "ATTACH", detail: "Screenshot added" });
   revalidatePath(`/entries/${id}`);
   return {};
 }

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewEntry() {
   await requireSession();
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   if (!ev) {
     return (
       <div className="card p-8 text-center">

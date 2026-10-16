@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function ReviewQueue() {
   await requireRole("SENIOR");
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   if (!ev) return <p className="text-sm text-body/70">No active event.</p>;
 
-  const queue = listEntries({ eventId: ev.id, status: ["SUBMITTED", "UNDER_REVIEW"], sort: "reach" });
-  const escalated = listEntries({ eventId: ev.id, status: ["ESCALATED"], sort: "reach" });
+  const queue = await listEntries({ eventId: ev.id, status: ["SUBMITTED", "UNDER_REVIEW"], sort: "reach" });
+  const escalated = await listEntries({ eventId: ev.id, status: ["ESCALATED"], sort: "reach" });
 
   const Section = ({ title, rows, hint }: { title: string; rows: typeof queue; hint: string }) => (
     <div className="card overflow-hidden">

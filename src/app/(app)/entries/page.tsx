@@ -12,7 +12,7 @@ export default async function EntriesPage({
   searchParams: Record<string, string>;
 }) {
   const session = await requireSession();
-  const ev = getActiveEvent();
+  const ev = await getActiveEvent();
   if (!ev) return <p className="text-sm text-body/70">No active event.</p>;
 
   const f: EntryFilter = { eventId: ev.id };
@@ -26,7 +26,7 @@ export default async function EntriesPage({
   f.sort = searchParams.sort === "reach" ? "reach" : "recent";
   f.limit = 500;
 
-  const rows = listEntries(f);
+  const rows = await listEntries(f);
 
   return (
     <div className="space-y-4">

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const s = await requireSession();
-  const u = getUserById(s.userId)!;
+  const u = (await getUserById(s.userId))!;
   const appUrl = process.env.APP_URL || "http://localhost:3000";
 
   return (
