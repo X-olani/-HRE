@@ -513,7 +513,7 @@ export async function dashboardStats(eventId: string) {
   const byTier = await query<{ tier: number; c: string | number }>("SELECT tier, COUNT(*) c FROM entries WHERE event_id=? GROUP BY tier", eventId);
   const byReviewer = await query<{ name: string; c: string | number }>(
     `SELECT u.name AS name, COUNT(*) c FROM entries e JOIN users u ON u.id=e.created_by_id
-     WHERE e.event_id=? GROUP BY e.created_by_id ORDER BY c DESC LIMIT 12`,
+     WHERE e.event_id=? GROUP BY e.created_by_id, u.name ORDER BY c DESC LIMIT 12`,
     eventId
   );
   return {
