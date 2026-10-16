@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "CABC HRE Capture",
+  "version": "1.0.0",
+  "description": "One-click capture: screenshot the current post and log it to the CABC HRE Monitor as a draft entry.",
+  "permissions": ["activeTab", "scripting", "storage", "notifications"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Log this post to HRE Monitor"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}
